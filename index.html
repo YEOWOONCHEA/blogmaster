@@ -29,7 +29,11 @@
           <span class="gemini-dot disconnected" id="geminiDot"></span>
           <span id="geminiLabel">Gemini 미연결</span>
         </div>
-        <button class="btn-api-key" id="btnApiKey">🔑 API 키 설정</button>
+        <div class="gemini-status" id="naverStatus" title="네이버 API 상태">
+          <span class="gemini-dot disconnected" id="naverDot"></span>
+          <span id="naverLabel">네이버 미연결</span>
+        </div>
+        <button class="btn-api-key" id="btnApiKey">🔑 API 설정</button>
         <button class="btn-upgrade" id="btnUpgrade">PRO</button>
       </div>
     </div>
@@ -295,26 +299,31 @@
   <!-- SEO 분석 결과 패널 -->
   <div class="seo-panel hidden" id="seoPanel"></div>
 
-  <!-- Gemini API Key Modal -->
+  <!-- API Config Modal -->
   <div class="modal-overlay hidden" id="apiModalOverlay">
-    <div class="api-modal" id="apiModal">
+    <div class="api-modal" id="apiModal" style="width: 520px;">
       <div class="api-modal-header">
-        <div class="gemini-logo">✨ Gemini AI 연결</div>
+        <div class="gemini-logo">⚙️ API 설정 관리</div>
         <button class="modal-close-btn" id="apiModalClose">✕</button>
       </div>
-      <div class="api-modal-body">
-        <div class="gemini-info-box">
+      <div class="api-modal-body" style="max-height: 80vh; overflow-y: auto;">
+        
+        <!-- Gemini Section -->
+        <div class="api-section-title" style="font-weight: 700; font-size: 15px; color: var(--gemini-purple); border-bottom: 2px solid #f1f5f9; padding-bottom: 6px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+          <span>✨ Gemini AI 설정</span>
+        </div>
+        <div class="gemini-info-box" style="margin-bottom: 12px;">
           <p>🔑 Google AI Studio에서 무료 API 키를 발급받아 연결하세요.</p>
           <a href="https://aistudio.google.com/app/apikey" target="_blank" class="api-link">→ API 키 발급받기 (무료)</a>
         </div>
-        <div class="form-group">
+        <div class="form-group" style="margin-bottom: 12px;">
           <label class="form-label">Gemini API 키:</label>
           <div class="api-input-wrap">
             <input type="password" class="form-input" id="geminiApiKeyInput" placeholder="AIzaSy..." />
             <button class="btn-eye" id="btnEyeToggle">👁️</button>
           </div>
         </div>
-        <div class="api-model-group">
+        <div class="api-model-group" style="margin-bottom: 16px;">
           <label class="form-label">모델 선택:</label>
           <select class="form-select" id="geminiModel">
             <option value="gemini-1.5-flash">gemini-1.5-flash (빠름, 무료)</option>
@@ -322,7 +331,25 @@
             <option value="gemini-2.0-flash">gemini-2.0-flash (최신)</option>
           </select>
         </div>
-        <button class="btn-connect" id="btnConnectGemini">🚀 연결하기</button>
+
+        <!-- Naver Section -->
+        <div class="api-section-title" style="font-weight: 700; font-size: 15px; color: var(--green); border-bottom: 2px solid #f1f5f9; padding-bottom: 6px; margin-bottom: 12px; margin-top: 12px; display: flex; align-items: center; gap: 6px;">
+          <span>🟢 네이버 검색 API 설정</span>
+        </div>
+        <div class="gemini-info-box" style="margin-bottom: 12px; background: #f0fdf4; border-left-color: var(--green);">
+          <p>🔑 네이버 개발자 센터에서 Client ID와 Secret을 발급받으세요.</p>
+          <a href="https://developers.naver.com/apps/#/register" target="_blank" class="api-link" style="color: var(--green);">→ 네이버 API 등록하러 가기</a>
+        </div>
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label class="form-label">Naver Client ID:</label>
+          <input type="text" class="form-input" id="naverClientIdInput" placeholder="네이버 Client ID 입력" />
+        </div>
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label class="form-label">Naver Client Secret:</label>
+          <input type="password" class="form-input" id="naverClientSecretInput" placeholder="네이버 Client Secret 입력" />
+        </div>
+
+        <button class="btn-connect" id="btnSaveAllApis">🚀 설정 저장 및 연결하기</button>
         <div class="api-test-result hidden" id="apiTestResult"></div>
       </div>
     </div>

@@ -5,9 +5,12 @@
 // ── 전역 상태 ─────────────────────────────────────────────
 let geminiApiKey = localStorage.getItem("geminiApiKey") || "";
 let geminiModel  = localStorage.getItem("geminiModel")  || "gemini-1.5-flash";
+let naverClientId = localStorage.getItem("naverClientId") || "";
+let naverClientSecret = localStorage.getItem("naverClientSecret") || "";
 let activeTab    = "keyword";
 let activeTone   = "friendly";
 let isConnected  = false;
+let isNaverConnected = false;
 
 // ── 내장 키워드 DB (Gemini 미연결 시 폴백) ────────────────
 const KEYWORD_DB = {
@@ -135,6 +138,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (geminiApiKey) {
     setConnectedStatus(true);
   }
+  if (naverClientId && naverClientSecret) {
+    syncNaverKeys(naverClientId, naverClientSecret);
+  }
 });
 
 // ── 네비게이션 ───────────────────────────────────────────────
@@ -158,62 +164,118 @@ function switchTab(tab) {
 
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
-// ── Gemini API 모달 ──────────────────────────────────────────
+// ── API 설정 모달 및 연결 관리 ───────────────────────────────
 function initGeminiModal() {
   const overlay   = document.getElementById("apiModalOverlay");
-  const input     = document.getElementById("geminiApiKeyInput");
+  const geminiInput = document.getElementById("geminiApiKeyInput");
   const modelSel  = document.getElementById("geminiModel");
+  const naverIdInput = document.getElementById("naverClientIdInput");
+  const naverSecretInput = document.getElementById("naverClientSecretInput");
+  
   const btnOpen   = document.getElementById("btnApiKey");
   const btnClose  = document.getElementById("apiModalClose");
   const btnEye    = document.getElementById("btnEyeToggle");
-  const btnConn   = document.getElementById("btnConnectGemini");
+  const btnSave   = document.getElementById("btnSaveAllApis");
   const result    = document.getElementById("apiTestResult");
 
   // 저장값 복원
-  if (geminiApiKey) input.value = geminiApiKey;
+  if (geminiApiKey) geminiInput.value = geminiApiKey;
   if (geminiModel)  modelSel.value = geminiModel;
+  if (naverClientId) naverIdInput.value = naverClientId;
+  if (naverClientSecret) naverSecretInput.value = naverClientSecret;
 
   btnOpen.addEventListener("click", () => overlay.classList.remove("hidden"));
   btnClose.addEventListener("click", () => overlay.classList.add("hidden"));
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.classList.add("hidden"); });
 
-  // 비밀번호 보기/숨기기
+  // 비밀번호 보기/숨기기 (Gemini)
   btnEye.addEventListener("click", () => {
-    input.type = input.type === "password" ? "text" : "password";
-    btnEye.textContent = input.type === "password" ? "👁️" : "🙈";
+    geminiInput.type = geminiInput.type === "password" ? "text" : "password";
+    btnEye.textContent = geminiInput.type === "password" ? "👁️" : "🙈";
   });
 
-  // 연결 버튼
-  btnConn.addEventListener("click", async () => {
-    const key   = input.value.trim();
-    const model = modelSel.value;
-    if (!key) { showResult(result, false, "API 키를 입력해 주세요."); return; }
+  // 통합 저장 및 연결 버튼
+  btnSave.addEventListener("click", async () => {
+    const gKey   = geminiInput.value.trim();
+    const gModel = modelSel.value;
+    const nId    = naverIdInput.value.trim();
+    const nSecret = naverSecretInput.value.trim();
 
-    btnConn.textContent = "⏳ 연결 테스트 중...";
-    btnConn.disabled = true;
-    setConnectedStatus("connecting");
+    btnSave.textContent = "⏳ 연결 설정 중...";
+    btnSave.disabled = true;
+    result.classList.add("hidden");
 
-    try {
-      const ok = await testGeminiKey(key, model);
-      if (ok) {
-        geminiApiKey = key;
-        geminiModel  = model;
-        localStorage.setItem("geminiApiKey", key);
-        localStorage.setItem("geminiModel",  model);
-        setConnectedStatus(true);
-        showResult(result, true, "✅ 연결 성공! 이제 진짜 Gemini AI로 글을 작성합니다.");
-        setTimeout(() => overlay.classList.add("hidden"), 1500);
-      } else {
+    let geminiOk = false;
+    let naverOk = false;
+    let messages = [];
+
+    // 1. Gemini 검증
+    if (gKey) {
+      setConnectedStatus("connecting");
+      try {
+        geminiOk = await testGeminiKey(gKey, gModel);
+        if (geminiOk) {
+          geminiApiKey = gKey;
+          geminiModel  = gModel;
+          localStorage.setItem("geminiApiKey", gKey);
+          localStorage.setItem("geminiModel", gModel);
+          setConnectedStatus(true);
+          messages.push("✅ Gemini AI 연결 성공!");
+        } else {
+          setConnectedStatus(false);
+          messages.push("❌ Gemini API 키 검증 실패 (키가 올바르지 않음)");
+        }
+      } catch (e) {
         setConnectedStatus(false);
-        showResult(result, false, "❌ API 키가 올바르지 않습니다. 다시 확인해 주세요.");
+        messages.push("❌ Gemini 연결 오류: " + e.message);
       }
-    } catch (e) {
+    } else {
+      geminiApiKey = "";
+      localStorage.removeItem("geminiApiKey");
       setConnectedStatus(false);
-      showResult(result, false, "❌ 오류: " + e.message);
     }
 
-    btnConn.textContent = "🚀 연결하기";
-    btnConn.disabled = false;
+    // 2. 네이버 검증 & 서버 동기화
+    if (nId && nSecret) {
+      setNaverConnectedStatus("connecting");
+      try {
+        naverOk = await syncNaverKeys(nId, nSecret);
+        if (naverOk) {
+          naverClientId = nId;
+          naverClientSecret = nSecret;
+          localStorage.setItem("naverClientId", nId);
+          localStorage.setItem("naverClientSecret", nSecret);
+          setNaverConnectedStatus(true);
+          messages.push("✅ 네이버 검색 API 설정 성공!");
+        } else {
+          setNaverConnectedStatus(false);
+          messages.push("❌ 네이버 API 연동 실패 (ID/Secret 확인)");
+        }
+      } catch (e) {
+        setNaverConnectedStatus(false);
+        messages.push("❌ 네이버 연동 오류: " + e.message);
+      }
+    } else {
+      naverClientId = "";
+      naverClientSecret = "";
+      localStorage.removeItem("naverClientId");
+      localStorage.removeItem("naverClientSecret");
+      setNaverConnectedStatus(false);
+    }
+
+    // 결과 표시
+    if (messages.length === 0) {
+      showResult(result, false, "설정할 API 키를 입력해 주세요.");
+    } else {
+      const isSuccess = (gKey ? geminiOk : true) && (nId ? naverOk : true);
+      showResult(result, isSuccess, messages.join("<br/>"));
+      if (isSuccess) {
+        setTimeout(() => overlay.classList.add("hidden"), 1500);
+      }
+    }
+
+    btnSave.textContent = "🚀 설정 저장 및 연결하기";
+    btnSave.disabled = false;
   });
 }
 
@@ -232,6 +294,22 @@ async function testGeminiKey(key, model) {
   return !!(data?.candidates?.[0]?.content?.parts?.[0]?.text);
 }
 
+async function syncNaverKeys(clientId, clientSecret) {
+  try {
+    const res = await fetch("/api/naver/set-keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId, clientSecret })
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data.ok;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+}
+
 function setConnectedStatus(status) {
   const dot   = document.getElementById("geminiDot");
   const label = document.getElementById("geminiLabel");
@@ -241,7 +319,6 @@ function setConnectedStatus(status) {
     isConnected = true;
     dot.className   = "gemini-dot connected";
     label.textContent = "Gemini 연결됨 ✓";
-    btnApiKey.textContent = "⚙️ API 설정";
   } else if (status === "connecting") {
     dot.className   = "gemini-dot connecting";
     label.textContent = "연결 중...";
@@ -249,12 +326,29 @@ function setConnectedStatus(status) {
     isConnected = false;
     dot.className   = "gemini-dot disconnected";
     label.textContent = "Gemini 미연결";
-    btnApiKey.textContent = "🔑 API 키 설정";
+  }
+}
+
+function setNaverConnectedStatus(status) {
+  const dot   = document.getElementById("naverDot");
+  const label = document.getElementById("naverLabel");
+
+  if (status === true || status === "connected") {
+    isNaverConnected = true;
+    dot.className   = "gemini-dot connected";
+    label.textContent = "네이버 연결됨 ✓";
+  } else if (status === "connecting") {
+    dot.className   = "gemini-dot connecting";
+    label.textContent = "연결 중...";
+  } else {
+    isNaverConnected = false;
+    dot.className   = "gemini-dot disconnected";
+    label.textContent = "네이버 미연결";
   }
 }
 
 function showResult(el, success, msg) {
-  el.textContent = msg;
+  el.innerHTML   = msg;
   el.className   = "api-test-result " + (success ? "success" : "error");
   el.classList.remove("hidden");
 }
@@ -306,6 +400,18 @@ function initKeywordTab() {
   });
 }
 
+async function getNaverAnalysis(kw) {
+  try {
+    const res = await fetch(`/api/naver/keyword-analysis?query=${encodeURIComponent(kw)}`);
+    if (!res.ok) throw new Error("Naver analysis failed");
+    const data = await res.json();
+    return data.ok ? data : null;
+  } catch (e) {
+    console.error("Naver API analysis error:", e);
+    return null;
+  }
+}
+
 function analyzeKeyword(kw) {
   if (!kw) return;
   const btn = document.getElementById("btnAnalyze");
@@ -319,12 +425,47 @@ function analyzeKeyword(kw) {
     btn.textContent = "분석하기";
     btn.disabled = false;
 
-    let data = KEYWORD_DB[kw];
+    let data = null;
 
-    if (!data && isConnected) {
-      // Gemini로 키워드 분석 요청
+    // 1. 네이버 API가 연결되어 있으면 실제 네이버 데이터 가져옴
+    let naverData = null;
+    if (isNaverConnected) {
+      naverData = await getNaverAnalysis(kw);
+    }
+
+    // 2. Gemini가 연결되어 있으면 지능적으로 데이터 구조화
+    if (isConnected && geminiApiKey) {
       try {
-        const prompt = `당신은 한국 SEO 전문가입니다. 키워드 "${kw}"에 대해 다음 JSON 형식으로만 답해주세요 (다른 텍스트 없이):
+        let prompt = "";
+        if (naverData) {
+          prompt = `당신은 한국 최고의 네이버/구글 SEO 키워드 분석 전문가입니다.
+키워드: "${kw}"
+네이버 블로그 총 발행 문서 수: ${naverData.totalBlogResults}
+네이버 연관 형태소/단어: ${naverData.relatedKeywords.join(", ")}
+
+이 정보를 참고하여, 블로그 포스팅 시 상위 노출 및 애드센스 수익을 극대화할 수 있는 관련 롱테일 키워드 5개와 글쓰기 아이디어 5개를 분석해주세요.
+반드시 아래의 JSON 형식으로만 응답하세요 (설명 없이 JSON 코드만):
+{
+  "volume": "${naverData.totalBlogResults}건 발행",
+  "competition": "${naverData.competition}",
+  "cpc": "예상 CPC (예: 2,500원)",
+  "related": [
+    {"kw": "네이버 연관단어를 조합한 수익성 키워드 1", "vol": "예상 월 검색량", "comp": "낮음 또는 중간", "cpc": "단가원", "profit": 5},
+    {"kw": "네이버 연관단어를 조합한 수익성 키워드 2", "vol": "예상 월 검색량", "comp": "낮음 또는 중간", "cpc": "단가원", "profit": 4},
+    {"kw": "네이버 연관단어를 조합한 수익성 키워드 3", "vol": "예상 월 검색량", "comp": "낮음 또는 중간", "cpc": "단가원", "profit": 5},
+    {"kw": "네이버 연관단어를 조합한 수익성 키워드 4", "vol": "예상 월 검색량", "comp": "낮음 또는 중간", "cpc": "단가원", "profit": 3},
+    {"kw": "네이버 연관단어를 조합한 수익성 키워드 5", "vol": "예상 월 검색량", "comp": "낮음 또는 중간", "cpc": "단가원", "profit": 5}
+  ],
+  "ideas": [
+    "상위 노출을 노릴 수 있는 제목 아이디어 1",
+    "상위 노출을 노릴 수 있는 제목 아이디어 2",
+    "상위 노출을 노릴 수 있는 제목 아이디어 3",
+    "상위 노출을 노릴 수 있는 제목 아이디어 4",
+    "상위 노출을 노릴 수 있는 제목 아이디어 5"
+  ]
+}`;
+        } else {
+          prompt = `당신은 한국 SEO 전문가입니다. 키워드 "${kw}"에 대해 다음 JSON 형식으로만 답해주세요 (다른 텍스트 없이):
 {
   "volume": "예상 월 검색량 (숫자,단위)",
   "competition": "낮음 또는 중간 또는 높음",
@@ -344,14 +485,36 @@ function analyzeKeyword(kw) {
     "블로그 글 제목 아이디어 5"
   ]
 }`;
+        }
+
         const raw = await callGemini(prompt);
         const jsonStr = raw.replace(/```json|```/g, "").trim();
         data = JSON.parse(jsonStr);
       } catch (e) {
-        data = generateFallback(kw);
+        console.error("Gemini keyword parse error:", e);
       }
-    } else if (!data) {
-      data = generateFallback(kw);
+    }
+
+    // 3. Gemini가 연결되지 않았거나 에러가 났을 때 폴백
+    if (!data) {
+      if (naverData) {
+        // 네이버 데이터 기반 자체 폴백 생성
+        data = {
+          volume: `${naverData.totalBlogResults}건 발행`,
+          competition: naverData.competition,
+          cpc: "1,500원",
+          related: naverData.relatedKeywords.slice(0, 5).map((k, i) => ({
+            kw: kw + " " + k,
+            vol: (Math.floor(Math.random() * 8000 + 500)).toLocaleString(),
+            comp: naverData.competition === "높음" ? "중간" : "낮음",
+            cpc: (Math.floor(Math.random() * 1500 + 500)).toLocaleString() + "원",
+            profit: Math.floor(Math.random() * 2 + 3)
+          })),
+          ideas: naverData.relatedKeywords.slice(0, 5).map(k => `${kw} ${k} 핵심 요약 및 꿀팁 정리`)
+        };
+      } else {
+        data = KEYWORD_DB[kw] || generateFallback(kw);
+      }
     }
 
     renderKeywordResults(kw, data);
