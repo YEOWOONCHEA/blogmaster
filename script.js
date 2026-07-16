@@ -731,7 +731,7 @@ async function generateContent() {
   try {
     let html = "";
 
-    if (isConnected && geminiApiKey) {
+    if (isConnected) {
       // ── 실제 Gemini API 호출 ──
       const typeMap = { info:"정보/안내", review:"리뷰/후기", compare:"비교/분석", howto:"방법/가이드", news:"뉴스/트렌드", list:"리스트/추천" };
       const toneMap = { friendly:"친근하고 쉬운", professional:"전문적이고 신뢰할 수 있는", casual:"가볍고 재미있는" };
@@ -758,7 +758,7 @@ async function generateContent() {
    - <h3>🔍 SEO 메타 정보</h3>
    - <p><strong>메타 제목:</strong> ...</p>
    - <p><strong>메타 설명:</strong> ...</p>
-   - <div class="hashtags">에 <span class="hashtag"> 형식으로 해시태그 5개
+   - <div class="hashtags">are <span class="hashtag"> 형식으로 해시태그 5개
 
 글은 실용적이고 독자에게 진짜 도움이 되어야 합니다. HTML 태그만 반환하세요 (마크다운 코드블록 없이).`;
 
@@ -783,7 +783,7 @@ async function generateContent() {
     content.classList.remove("hidden");
 
     // API 없으면 경고 표시
-    if (!isConnected || !geminiApiKey) {
+    if (!isConnected) {
       const warn = document.createElement("div");
       warn.className = "no-key-warning";
       warn.innerHTML = `⚠️ 현재 <strong>데모 글</strong>입니다. 진짜 AI 글을 생성하려면:<br/>
