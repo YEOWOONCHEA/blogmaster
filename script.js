@@ -134,14 +134,32 @@ document.addEventListener("DOMContentLoaded", () => {
   renderRealtimeMini();
   updateRealtimeTime();
 
-  // 저장된 키가 있으면 자동 연결 상태 표시
-  if (geminiApiKey) {
-    setConnectedStatus(true);
-  }
-  if (naverClientId && naverClientSecret) {
-    syncNaverKeys(naverClientId, naverClientSecret);
-  }
+  // 서버의 설정 상태 로드
+  checkServerConfig();
 });
+
+async function checkServerConfig() {
+  try {
+    const res = await fetch("/api/config");
+    if (!res.ok) return;
+    const config = await res.json();
+    
+    if (config.hasGemini) {
+      geminiModel = config.geminiModel;
+      setConnectedStatus(true);
+    } else {
+      setConnectedStatus(false);
+    }
+    
+    if (config.hasNaver) {
+      setNaverConnectedStatus(true);
+    } else {
+      setNaverConnectedStatus(false);
+    }
+  } catch (e) {
+    console.error("서버 설정 로드 실패:", e);
+  }
+}
 
 // ── 네비게이션 ───────────────────────────────────────────────
 function initNav() {
@@ -178,13 +196,24 @@ function initGeminiModal() {
   const btnSave   = document.getElementById("btnSaveAllApis");
   const result    = document.getElementById("apiTestResult");
 
-  // 저장값 복원
-  if (geminiApiKey) geminiInput.value = geminiApiKey;
-  if (geminiModel)  modelSel.value = geminiModel;
-  if (naverClientId) naverIdInput.value = naverClientId;
-  if (naverClientSecret) naverSecretInput.value = naverClientSecret;
+  // 모달을 열 때 현재 서버 상태를 먼저 확인하여 필드 채우기
+  btnOpen.addEventListener("click", async () => {
+    overlay.classList.remove("hidden");
+    try {
+      const res = await fetch("/api/config");
+      if (res.ok) {
+        const config = await res.json();
+        modelSel.value = config.geminiModel || "gemini-2.5-flash";
+        // 보안상 실제 키값은 노출하지 않고 플레이스홀더나 별표 표시
+        if (config.hasGemini) geminiInput.value = "••••••••••••••••••••";
+        if (config.hasNaver) {
+          naverIdInput.value = "••••••••••••••••••••";
+          naverSecretInput.value = "••••••••••••••••••••";
+        }
+      }
+    } catch (e) {}
+  });
 
-  btnOpen.addEventListener("click", () => overlay.classList.remove("hidden"));
   btnClose.addEventListener("click", () => overlay.classList.add("hidden"));
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.classList.add("hidden"); });
 
@@ -209,42 +238,59 @@ function initGeminiModal() {
     let naverOk = false;
     let messages = [];
 
-    // 1. Gemini 검증
-    if (gKey) {
+    // 1. Gemini 저장 & 검증
+    if (gKey && gKey !== "••••••••••••••••••••") {
       setConnectedStatus("connecting");
       try {
-        geminiOk = await testGeminiKey(gKey, gModel);
-        if (geminiOk) {
-          geminiApiKey = gKey;
-          geminiModel  = gModel;
-          localStorage.setItem("geminiApiKey", gKey);
-          localStorage.setItem("geminiModel", gModel);
-          setConnectedStatus(true);
-          messages.push("✅ Gemini AI 연결 성공!");
+        // 서버에 키 임시 등록
+        const saveRes = await fetch("/api/gemini/set-key", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apiKey: gKey, model: gModel })
+        });
+        
+        if (saveRes.ok) {
+          // 서버를 통해 테스트 호출
+          geminiOk = await testServerGemini();
+          if (geminiOk) {
+            setConnectedStatus(true);
+            messages.push("✅ Gemini AI 연결 성공!");
+          } else {
+            setConnectedStatus(false);
+            messages.push("❌ Gemini API 키 검증 실패 (키가 올바르지 않음)");
+          }
         } else {
           setConnectedStatus(false);
-          messages.push("❌ Gemini API 키 검증 실패 (키가 올바르지 않음)");
+          messages.push("❌ Gemini 설정 저장 실패");
         }
       } catch (e) {
         setConnectedStatus(false);
         messages.push("❌ Gemini 연결 오류: " + e.message);
       }
+    } else if (gKey === "••••••••••••••••••••") {
+      geminiOk = true; // 변경 없음
     } else {
-      geminiApiKey = "";
-      localStorage.removeItem("geminiApiKey");
+      // 키 삭제
+      await fetch("/api/gemini/set-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: "" })
+      });
       setConnectedStatus(false);
     }
 
-    // 2. 네이버 검증 & 서버 동기화
-    if (nId && nSecret) {
+    // 2. 네이버 저장 & 검증
+    if (nId && nSecret && nId !== "••••••••••••••••••••" && nSecret !== "••••••••••••••••••••") {
       setNaverConnectedStatus("connecting");
       try {
-        naverOk = await syncNaverKeys(nId, nSecret);
-        if (naverOk) {
-          naverClientId = nId;
-          naverClientSecret = nSecret;
-          localStorage.setItem("naverClientId", nId);
-          localStorage.setItem("naverClientSecret", nSecret);
+        const naverRes = await fetch("/api/naver/set-keys", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clientId: nId, clientSecret: nSecret })
+        });
+        
+        if (naverRes.ok) {
+          naverOk = true;
           setNaverConnectedStatus(true);
           messages.push("✅ 네이버 검색 API 설정 성공!");
         } else {
@@ -255,11 +301,15 @@ function initGeminiModal() {
         setNaverConnectedStatus(false);
         messages.push("❌ 네이버 연동 오류: " + e.message);
       }
+    } else if (nId === "••••••••••••••••••••") {
+      naverOk = true; // 변경 없음
     } else {
-      naverClientId = "";
-      naverClientSecret = "";
-      localStorage.removeItem("naverClientId");
-      localStorage.removeItem("naverClientSecret");
+      // 키 삭제
+      await fetch("/api/naver/set-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: "", clientSecret: "" })
+      });
       setNaverConnectedStatus(false);
     }
 
@@ -267,7 +317,7 @@ function initGeminiModal() {
     if (messages.length === 0) {
       showResult(result, false, "설정할 API 키를 입력해 주세요.");
     } else {
-      const isSuccess = (gKey ? geminiOk : true) && (nId ? naverOk : true);
+      const isSuccess = geminiOk && naverOk;
       showResult(result, isSuccess, messages.join("<br/>"));
       if (isSuccess) {
         setTimeout(() => overlay.classList.add("hidden"), 1500);
@@ -276,36 +326,21 @@ function initGeminiModal() {
 
     btnSave.textContent = "🚀 설정 저장 및 연결하기";
     btnSave.disabled = false;
+    checkServerConfig(); // 새로 구성된 설정 로드
   });
 }
 
-async function testGeminiKey(key, model) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: "안녕하세요. 테스트입니다. 한 문장으로만 답해주세요." }] }],
-      generationConfig: { maxOutputTokens: 50 }
-    })
-  });
-  if (!res.ok) return false;
-  const data = await res.json();
-  return !!(data?.candidates?.[0]?.content?.parts?.[0]?.text);
-}
-
-async function syncNaverKeys(clientId, clientSecret) {
+async function testServerGemini() {
   try {
-    const res = await fetch("/api/naver/set-keys", {
+    const res = await fetch("/api/gemini/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clientId, clientSecret })
+      body: JSON.stringify({ prompt: "Hi, respond with only one word 'OK'" })
     });
     if (!res.ok) return false;
     const data = await res.json();
-    return data.ok;
+    return data.ok && data.text.includes("OK");
   } catch (e) {
-    console.error(e);
     return false;
   }
 }
@@ -313,7 +348,6 @@ async function syncNaverKeys(clientId, clientSecret) {
 function setConnectedStatus(status) {
   const dot   = document.getElementById("geminiDot");
   const label = document.getElementById("geminiLabel");
-  const btnApiKey = document.getElementById("btnApiKey");
 
   if (status === true || status === "connected") {
     isConnected = true;
@@ -353,28 +387,19 @@ function showResult(el, success, msg) {
   el.classList.remove("hidden");
 }
 
-// ── Gemini API 호출 ──────────────────────────────────────────
+// ── Gemini API 호출 (서버 프록시 호출로 변경) ───────────────────────
 async function callGemini(prompt) {
-  if (!geminiApiKey) throw new Error("API 키 없음");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
-  const res = await fetch(url, {
+  const res = await fetch("/api/gemini/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.8,
-        maxOutputTokens: 4096,
-        topP: 0.9
-      }
-    })
+    body: JSON.stringify({ prompt })
   });
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(err?.error?.message || "API 오류");
+    throw new Error(err.msg || "API 오류");
   }
   const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  return data.text;
 }
 
 // ── 키워드 탭 ────────────────────────────────────────────────

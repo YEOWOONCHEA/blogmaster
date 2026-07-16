@@ -1,12 +1,12 @@
 // ============================================================
-// BlogMaster AI – server.js (Node.js 프록시 서버)
-// 네이버 API CORS 우회 + 정적 파일 서버
+// BlogMaster AI – server.js (CORS 우회 + 영구 설정 저장 프록시)
 // ============================================================
 require("dotenv").config();
 const express = require("express");
 const cors    = require("cors");
 const fetch   = require("node-fetch");
 const path    = require("path");
+const fs      = require("fs");
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -15,37 +15,130 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-// ── 네이버 API 키 저장소 (런타임) ─────────────────────────
-let naverClientId     = process.env.NAVER_CLIENT_ID     || "";
-let naverClientSecret = process.env.NAVER_CLIENT_SECRET || "";
+const ENV_PATH = path.join(__dirname, ".env");
 
-// ── API 키 설정 엔드포인트 ────────────────────────────────
+// ── 환경변수 저장 함수 ────────────────────────────────────
+function saveToEnv(key, value) {
+  let envContent = "";
+  if (fs.existsSync(ENV_PATH)) {
+    envContent = fs.readFileSync(ENV_PATH, "utf8");
+  }
+  
+  const lines = envContent.split("\n");
+  let found = false;
+  const newLines = lines.map(line => {
+    if (line.trim().startsWith(`${key}=`)) {
+      found = true;
+      return `${key}=${value}`;
+    }
+    return line;
+  });
+  
+  if (!found) {
+    newLines.push(`${key}=${value}`);
+  }
+  
+  fs.writeFileSync(ENV_PATH, newLines.join("\n").trim() + "\n", "utf8");
+  process.env[key] = value; // 현재 프로세스에도 적용
+}
+
+// ── 설정 상태 가져오기 (보안을 위해 키 값은 숨기고 존재 여부만 반환) ──
+app.get("/api/config", (req, res) => {
+  res.json({
+    hasGemini: !!process.env.GEMINI_API_KEY,
+    geminiModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    hasNaver: !!(process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET)
+  });
+});
+
+// ── 네이버 API 키 저장 ────────────────────────────────────
 app.post("/api/naver/set-keys", (req, res) => {
   const { clientId, clientSecret } = req.body;
   if (!clientId || !clientSecret) {
-    return res.status(400).json({ ok: false, msg: "clientId와 clientSecret 필요" });
+    return res.status(400).json({ ok: false, msg: "Client ID와 Secret이 누락되었습니다." });
   }
-  naverClientId     = clientId;
-  naverClientSecret = clientSecret;
-  res.json({ ok: true, msg: "✅ 네이버 API 키 설정 완료" });
+  
+  try {
+    saveToEnv("NAVER_CLIENT_ID", clientId);
+    saveToEnv("NAVER_CLIENT_SECRET", clientSecret);
+    res.json({ ok: true, msg: "✅ 네이버 API 키 저장 완료" });
+  } catch (e) {
+    res.status(500).json({ ok: false, msg: e.message });
+  }
 });
 
-// ── 키 상태 확인 ──────────────────────────────────────────
-app.get("/api/naver/status", (req, res) => {
-  res.json({ connected: !!(naverClientId && naverClientSecret) });
+// ── 제미니 API 키 저장 ────────────────────────────────────
+app.post("/api/gemini/set-key", (req, res) => {
+  const { apiKey, model } = req.body;
+  if (!apiKey) {
+    return res.status(400).json({ ok: false, msg: "API 키가 누락되었습니다." });
+  }
+  
+  try {
+    saveToEnv("GEMINI_API_KEY", apiKey);
+    if (model) saveToEnv("GEMINI_MODEL", model);
+    res.json({ ok: true, msg: "✅ Gemini API 키 저장 완료" });
+  } catch (e) {
+    res.status(500).json({ ok: false, msg: e.message });
+  }
 });
 
-// ── 네이버 검색 API 공통 프록시 ───────────────────────────
+// ── 제미니 AI 글쓰기 프록시 (CORS 우회 및 보안 강화) ─────────
+app.post("/api/gemini/generate", async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  const model  = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  
+  if (!apiKey) {
+    return res.status(401).json({ ok: false, msg: "Gemini API 키가 설정되지 않았습니다." });
+  }
+  
+  const { prompt } = req.body;
+  if (!prompt) {
+    return res.status(400).json({ ok: false, msg: "prompt가 누락되었습니다." });
+  }
+
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: 4096,
+          topP: 0.9
+        }
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      return res.status(resp.status).json({ ok: false, msg: err?.error?.message || "Gemini API 오류" });
+    }
+
+    const data = await resp.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    res.json({ ok: true, text });
+  } catch (e) {
+    res.status(500).json({ ok: false, msg: e.message });
+  }
+});
+
+// ── 네이버 검색 API 프록시 ───────────────────────────
 async function naverProxy(endpoint, query, display = 10, res) {
-  if (!naverClientId || !naverClientSecret) {
+  const clientId = process.env.NAVER_CLIENT_ID;
+  const clientSecret = process.env.NAVER_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
     return res.status(401).json({ ok: false, msg: "네이버 API 키가 설정되지 않았습니다." });
   }
   try {
     const url = `https://openapi.naver.com/v1/search/${endpoint}?query=${encodeURIComponent(query)}&display=${display}&sort=date`;
     const resp = await fetch(url, {
       headers: {
-        "X-Naver-Client-Id":     naverClientId,
-        "X-Naver-Client-Secret": naverClientSecret,
+        "X-Naver-Client-Id":     clientId,
+        "X-Naver-Client-Secret": clientSecret,
       }
     });
     if (!resp.ok) {
@@ -59,42 +152,36 @@ async function naverProxy(endpoint, query, display = 10, res) {
   }
 }
 
-// ── 블로그 검색 ───────────────────────────────────────────
 app.get("/api/naver/blog", (req, res) => {
   const { query, display = 10 } = req.query;
   if (!query) return res.status(400).json({ ok: false, msg: "query 필요" });
   naverProxy("blog.json", query, display, res);
 });
 
-// ── 뉴스 검색 ─────────────────────────────────────────────
 app.get("/api/naver/news", (req, res) => {
   const { query, display = 10 } = req.query;
   if (!query) return res.status(400).json({ ok: false, msg: "query 필요" });
   naverProxy("news.json", query, display, res);
 });
 
-// ── 연관 검색어 분석 (블로그 제목에서 키워드 추출) ─────────
+// ── 네이버 키워드 분석 ──────────────────────────────────
 app.get("/api/naver/keyword-analysis", async (req, res) => {
   const { query } = req.query;
+  const clientId = process.env.NAVER_CLIENT_ID;
+  const clientSecret = process.env.NAVER_CLIENT_SECRET;
+
   if (!query) return res.status(400).json({ ok: false, msg: "query 필요" });
-  if (!naverClientId || !naverClientSecret) {
+  if (!clientId || !clientSecret) {
     return res.status(401).json({ ok: false, msg: "네이버 API 키 없음" });
   }
 
   try {
-    // 블로그 + 뉴스 동시 검색
     const [blogResp, newsResp] = await Promise.all([
       fetch(`https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(query)}&display=20&sort=sim`, {
-        headers: {
-          "X-Naver-Client-Id":     naverClientId,
-          "X-Naver-Client-Secret": naverClientSecret,
-        }
+        headers: { "X-Naver-Client-Id": clientId, "X-Naver-Client-Secret": clientSecret }
       }),
       fetch(`https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(query)}&display=10&sort=date`, {
-        headers: {
-          "X-Naver-Client-Id":     naverClientId,
-          "X-Naver-Client-Secret": naverClientSecret,
-        }
+        headers: { "X-Naver-Client-Id": clientId, "X-Naver-Client-Secret": clientSecret }
       })
     ]);
 
@@ -104,7 +191,6 @@ app.get("/api/naver/keyword-analysis", async (req, res) => {
     const blogItems = blogData.items || [];
     const newsItems = newsData.items || [];
 
-    // 블로그 제목에서 연관 키워드 추출
     const titleTexts = blogItems.map(i => i.title.replace(/<[^>]+>/g, "")).join(" ");
     const wordFreq = {};
     titleTexts.split(/\s+/).forEach(w => {
@@ -118,7 +204,6 @@ app.get("/api/naver/keyword-analysis", async (req, res) => {
       .slice(0, 8)
       .map(([kw]) => kw);
 
-    // 경쟁도 추정 (블로그 총 결과수 기반)
     let competition = "낮음";
     if (totalBlogResults > 100000) competition = "높음";
     else if (totalBlogResults > 30000) competition = "중간";
@@ -128,19 +213,7 @@ app.get("/api/naver/keyword-analysis", async (req, res) => {
       query,
       totalBlogResults: totalBlogResults.toLocaleString(),
       competition,
-      relatedKeywords,
-      recentBlogs: blogItems.slice(0, 5).map(i => ({
-        title: i.title.replace(/<[^>]+>/g, ""),
-        link: i.link,
-        desc: i.description.replace(/<[^>]+>/g, ""),
-        date: i.postdate,
-        blogger: i.bloggername
-      })),
-      recentNews: newsItems.slice(0, 3).map(i => ({
-        title: i.title.replace(/<[^>]+>/g, ""),
-        link: i.link,
-        date: i.pubDate
-      }))
+      relatedKeywords
     });
 
   } catch (e) {
@@ -148,41 +221,10 @@ app.get("/api/naver/keyword-analysis", async (req, res) => {
   }
 });
 
-// ── 네이버 Datalab 검색어 트렌드 ─────────────────────────
-app.post("/api/naver/datalab/trend", async (req, res) => {
-  if (!naverClientId || !naverClientSecret) {
-    return res.status(401).json({ ok: false, msg: "네이버 API 키 없음" });
-  }
-  const { startDate, endDate, timeUnit = "week", keywordGroups } = req.body;
-  try {
-    const resp = await fetch("https://openapi.naver.com/v1/datalab/search", {
-      method: "POST",
-      headers: {
-        "X-Naver-Client-Id":     naverClientId,
-        "X-Naver-Client-Secret": naverClientSecret,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ startDate, endDate, timeUnit, keywordGroups })
-    });
-    if (!resp.ok) {
-      return res.status(resp.status).json({ ok: false, msg: "Datalab 오류" });
-    }
-    const data = await resp.json();
-    res.json({ ok: true, data });
-  } catch (e) {
-    res.status(500).json({ ok: false, msg: e.message });
-  }
-});
-
-// ── 루트: index.html 서빙 ─────────────────────────────────
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
 app.listen(PORT, () => {
-  console.log("┌─────────────────────────────────────────┐");
-  console.log(`│  BlogMaster AI 서버 시작!               │`);
-  console.log(`│  🌐 http://localhost:${PORT}               │`);
-  console.log("│  🔑 네이버 API 설정 후 사용 가능        │");
-  console.log("└─────────────────────────────────────────┘");
+  console.log(`🌐 BlogMaster AI 서버가 http://localhost:${PORT} 에서 실행 중입니다.`);
 });
