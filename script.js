@@ -11,6 +11,9 @@ let activeTab    = "keyword";
 let activeTone   = "friendly";
 let isConnected  = false;
 let isNaverConnected = false;
+let generatedHtml = "";
+let currentArticleKeyword = "";
+let activeOutputTab = "preview";
 
 // ── 내장 키워드 DB (Gemini 미연결 시 폴백) ────────────────
 const KEYWORD_DB = {
@@ -667,28 +670,166 @@ function initWriteTab() {
     });
   });
 
+  // 출력 탭 전환 리스너 추가
+  document.getElementById("otabPreview").addEventListener("click", () => switchOutputTab("preview"));
+  document.getElementById("otabHtml").addEventListener("click", () => switchOutputTab("html"));
+  document.getElementById("otabSeo").addEventListener("click", () => switchOutputTab("seo"));
+
   document.getElementById("btnGenerate").addEventListener("click", generateContent);
   document.getElementById("btnRegen").addEventListener("click", generateContent);
 
   document.getElementById("btnCopy").addEventListener("click", () => {
-    const content = document.getElementById("outputContent");
-    if (!content.classList.contains("hidden")) {
-      navigator.clipboard.writeText(content.innerText)
-        .then(() => alert("✅ 글이 클립보드에 복사되었습니다!"))
-        .catch(() => alert("복사 실패. 수동으로 복사해 주세요."));
-    } else { alert("먼저 글을 생성해 주세요."); }
+    if (!generatedHtml) { alert("먼저 글을 생성해 주세요."); return; }
+    navigator.clipboard.writeText(generatedHtml)
+      .then(() => alert("✅ HTML 원본이 클립보드에 복사되었습니다!"))
+      .catch(() => alert("복사 실패. 수동으로 복사해 주세요."));
   });
 
   document.getElementById("btnDownload").addEventListener("click", () => {
-    const content = document.getElementById("outputContent");
-    if (!content.classList.contains("hidden")) {
-      const blob = new Blob([content.innerText], { type: "text/plain;charset=utf-8" });
-      const a = Object.assign(document.createElement("a"), {
-        href: URL.createObjectURL(blob), download: `blog_${Date.now()}.txt`
-      });
-      a.click();
-    } else { alert("먼저 글을 생성해 주세요."); }
+    if (!generatedHtml) { alert("먼저 글을 생성해 주세요."); return; }
+    const blob = new Blob([generatedHtml], { type: "text/html;charset=utf-8" });
+    const a = Object.assign(document.createElement("a"), {
+      href: URL.createObjectURL(blob), download: `blog_${Date.now()}.html`
+    });
+    a.click();
   });
+}
+
+function switchOutputTab(tab) {
+  if (!generatedHtml) return;
+  activeOutputTab = tab;
+  
+  document.querySelectorAll(".output-tab").forEach(t => t.classList.remove("active"));
+  if (tab === "preview") document.getElementById("otabPreview").classList.add("active");
+  if (tab === "html") document.getElementById("otabHtml").classList.add("active");
+  if (tab === "seo") document.getElementById("otabSeo").classList.add("active");
+
+  const content = document.getElementById("outputContent");
+  content.innerHTML = "";
+
+  if (tab === "preview") {
+    content.innerHTML = generatedHtml;
+    if (!isConnected) {
+      const warn = document.createElement("div");
+      warn.className = "no-key-warning";
+      warn.innerHTML = `⚠️ 현재 <strong>데모 글</strong>입니다. 진짜 AI 글을 생성하려면:<br/>
+        <button onclick="document.getElementById('btnApiKey').click()">🔑 Gemini API 키 연결하기</button>`;
+      content.prepend(warn);
+    }
+  } else if (tab === "html") {
+    const txt = document.createElement("textarea");
+    txt.className = "raw-html-area";
+    txt.readOnly = true;
+    txt.value = generatedHtml;
+    content.appendChild(txt);
+  } else if (tab === "seo") {
+    content.innerHTML = renderSeoReport(generatedHtml, currentArticleKeyword);
+  }
+}
+
+function escapeHtml(unsafe) {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function renderSeoReport(html, kw) {
+  const cleanText = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const charCountWithSpace = cleanText.length;
+  const charCountNoSpace = cleanText.replace(/\s/g, "").length;
+  
+  let kwCount = 0;
+  if (kw) {
+    const escapedKw = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const matches = cleanText.match(new RegExp(escapedKw, "gi"));
+    kwCount = matches ? matches.length : 0;
+  }
+  
+  const density = charCountNoSpace > 0 ? ((kwCount * kw.length) / charCountNoSpace * 100).toFixed(1) : 0;
+  
+  const hasH1 = html.includes("<h1");
+  const hasH2 = html.includes("<h2");
+  const hasList = html.includes("<ul") || html.includes("<ol");
+  const hasIntroKw = cleanText.slice(0, 300).toLowerCase().includes(kw.toLowerCase());
+  
+  let score = 30;
+  if (charCountNoSpace > 800) score += 20;
+  else if (charCountNoSpace > 400) score += 10;
+  
+  if (kwCount >= 3 && kwCount <= 8) score += 20;
+  else if (kwCount > 0) score += 10;
+  
+  if (hasH1 && hasH2) score += 20;
+  if (hasList) score += 5;
+  if (hasIntroKw) score += 5;
+  
+  let scoreColor = "#22c55e";
+  let scoreText = "백점 만점에 백점! 완벽한 SEO 최적화 글입니다.";
+  if (score < 60) {
+    scoreColor = "#ef4444";
+    scoreText = "SEO 최적화 보완이 필요합니다. 키워드를 조금 더 배치해 보세요.";
+  } else if (score < 85) {
+    scoreColor = "#f59e0b";
+    scoreText = "대체로 우수한 글입니다. 약간의 수정으로 품질을 더 높일 수 있습니다.";
+  }
+
+  return `
+    <div class="seo-report">
+      <div class="seo-score-card">
+        <div class="seo-score-circle" style="background: ${scoreColor}; box-shadow: 0 4px 12px ${scoreColor}4d">
+          <span class="seo-score-value">${score}</span>
+          <span class="seo-score-label">SEO 점수</span>
+        </div>
+        <div class="seo-score-info">
+          <h4>${score >= 85 ? "🔥 최적화 완료" : score >= 60 ? "👍 양호함" : "⚠️ 보완 필요"}</h4>
+          <p>${scoreText}</p>
+        </div>
+      </div>
+      
+      <div class="seo-metrics-grid">
+        <div class="seo-metric-item">
+          <div class="seo-metric-val">${charCountWithSpace.toLocaleString()}자</div>
+          <div class="seo-metric-lbl">공백 포함 글자수</div>
+        </div>
+        <div class="seo-metric-item">
+          <div class="seo-metric-val">${charCountNoSpace.toLocaleString()}자</div>
+          <div class="seo-metric-lbl">공백 제외 글자수</div>
+        </div>
+        <div class="seo-metric-item">
+          <div class="seo-metric-val">${kwCount}회 (${density}%)</div>
+          <div class="seo-metric-lbl">키워드 반복 빈도</div>
+        </div>
+      </div>
+      
+      <div class="seo-checklist">
+        <h4>📋 SEO 핵심 체크리스트</h4>
+        
+        <div class="seo-check-item">
+          <span class="seo-check-icon ${hasH1 ? "pass" : "fail"}">${hasH1 ? "✅" : "❌"}</span>
+          <span>주제목(H1) 태그가 포함되어 있습니까?</span>
+        </div>
+        <div class="seo-check-item">
+          <span class="seo-check-icon ${hasH2 ? "pass" : "fail"}">${hasH2 ? "✅" : "❌"}</span>
+          <span>본문 소제목(H2) 태그가 1개 이상 존재합니까?</span>
+        </div>
+        <div class="seo-check-item">
+          <span class="seo-check-icon ${hasList ? "pass" : "fail"}">${hasList ? "✅" : "❌"}</span>
+          <span>독자의 가독성을 위한 리스트(ul/ol) 구조가 있습니까?</span>
+        </div>
+        <div class="seo-check-item">
+          <span class="seo-check-icon ${hasIntroKw ? "pass" : "fail"}">${hasIntroKw ? "✅" : "❌"}</span>
+          <span>글의 도입부(첫 300자)에 타겟 키워드가 등장합니까?</span>
+        </div>
+        <div class="seo-check-item">
+          <span class="seo-check-icon ${charCountNoSpace >= 1000 ? "pass" : "fail"}">${charCountNoSpace >= 1000 ? "✅" : "❌"}</span>
+          <span>글자수가 SEO 권장량(공백 제외 1,000자 이상)에 도달했습니까?</span>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 async function generateContent() {
@@ -778,18 +919,16 @@ async function generateContent() {
 
     await new Promise(r => setTimeout(r, 600));
     overlay.classList.add("hidden");
+    
+    // 글로벌 상태 저장
+    generatedHtml = html;
+    currentArticleKeyword = kw;
+    
+    // 미리보기 탭 활성화 및 렌더링
+    switchOutputTab("preview");
+    
     const content = document.getElementById("outputContent");
-    content.innerHTML = html;
     content.classList.remove("hidden");
-
-    // API 없으면 경고 표시
-    if (!isConnected) {
-      const warn = document.createElement("div");
-      warn.className = "no-key-warning";
-      warn.innerHTML = `⚠️ 현재 <strong>데모 글</strong>입니다. 진짜 AI 글을 생성하려면:<br/>
-        <button onclick="document.getElementById('btnApiKey').click()">🔑 Gemini API 키 연결하기</button>`;
-      content.prepend(warn);
-    }
 
   } catch (err) {
     overlay.classList.add("hidden");

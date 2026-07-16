@@ -118,7 +118,16 @@ app.post("/api/gemini/generate", async (req, res) => {
     }
 
     const data = await resp.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const candidate = data?.candidates?.[0];
+    const text = candidate?.content?.parts?.[0]?.text || "";
+    
+    if (!text) {
+      if (candidate?.finishReason === "SAFETY") {
+        return res.status(400).json({ ok: false, msg: "⚠️ 안전 정책(Safety)에 의해 콘텐츠 생성이 차단되었습니다. 다른 키워드로 시도해 주세요." });
+      }
+      return res.status(400).json({ ok: false, msg: "Gemini AI가 빈 응답을 반환했습니다. 다시 시도해 주세요." });
+    }
+
     res.json({ ok: true, text });
   } catch (e) {
     res.status(500).json({ ok: false, msg: e.message });
