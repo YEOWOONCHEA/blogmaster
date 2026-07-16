@@ -4,7 +4,7 @@
 
 // ── 전역 상태 ─────────────────────────────────────────────
 let geminiApiKey = localStorage.getItem("geminiApiKey") || "";
-let geminiModel  = localStorage.getItem("geminiModel")  || "gemini-1.5-flash";
+let geminiModel  = localStorage.getItem("geminiModel")  || "gemini-2.5-flash";
 let naverClientId = localStorage.getItem("naverClientId") || "";
 let naverClientSecret = localStorage.getItem("naverClientSecret") || "";
 let activeTab    = "keyword";
