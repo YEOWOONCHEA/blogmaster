@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BlogMaster AI - 키워드 분석 & AI 글쓰기 플랫폼</title>
+  <meta name="description" content="돈 되는 키워드를 찾고 AI로 블로그 글을 자동 생성하세요. 구글 애드센스 수익화를 위한 올인원 블로그 AI 플랫폼." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">✍️</span>
+        <span class="logo-text">BlogMaster <span class="logo-ai">AI</span></span>
+      </div>
+      <nav class="nav">
+        <a href="#" class="nav-link active" data-tab="keyword" id="navKeyword">🔍 키워드 도구</a>
+        <a href="#" class="nav-link" data-tab="write" id="navWrite">✍️ AI 글쓰기</a>
+        <a href="#" class="nav-link" data-tab="trend" id="navTrend">📈 실시간 검색어</a>
+        <a href="#" class="nav-link" data-tab="thumbnail" id="navThumb">🖼️ AI 썸네일</a>
+      </nav>
+      <div class="header-right">
+        <div class="credit-badge">
+          <span class="credit-icon">⚡</span>
+          <span id="creditCount">850</span> 크레딧
+        </div>
+        <button class="btn-upgrade" id="btnUpgrade">PRO 업그레이드</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main App -->
+  <main class="app-main">
+
+    <!-- ======================== TAB: 키워드 도구 ======================== -->
+    <section class="tab-section active" id="tabKeyword">
+      <div class="page-hero">
+        <h1>키워드분석을 위한<br/><span class="gradient-text">키워드 인텔리전스 플랫폼</span></h1>
+        <p>SEO, 콘텐츠 마케팅, 유튜브 분석, 키워드 추출 등, 여러분 곁에 단 하나 플랫폼에서 제공합니다.<br/>다양한 비즈니스 파트너가 BlogMaster AI와 함께합니다.</p>
+        <div class="main-search-box">
+          <div class="search-source-toggle">
+            <button class="source-btn active" id="srcNaver">🟢 네이버</button>
+            <button class="source-btn" id="srcGoogle">🔵 구글</button>
+          </div>
+          <div class="search-input-wrap">
+            <input type="text" id="mainKeywordInput" placeholder="키워드를 입력 후 Enter" class="main-search-input" />
+            <button class="btn-analyze" id="btnAnalyze">분석하기</button>
+          </div>
+          <div class="quick-keywords">
+            <span class="quick-label">빠른 검색:</span>
+            <button class="quick-btn" data-kw="실손보험">실손보험</button>
+            <button class="quick-btn" data-kw="청년도약계좌">청년도약계좌</button>
+            <button class="quick-btn" data-kw="연말정산">연말정산</button>
+            <button class="quick-btn" data-kw="다이어트 식단">다이어트 식단</button>
+            <button class="quick-btn" data-kw="자동차보험">자동차보험</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 분석 결과 -->
+      <div class="keyword-results hidden" id="keywordResults">
+        <div class="results-header">
+          <h2>🔍 "<span id="resultKeyword"></span>" 분석 결과</h2>
+          <div class="result-meta">
+            <span class="meta-badge" id="metaVolume">월 검색량: —</span>
+            <span class="meta-badge competition" id="metaComp">경쟁도: —</span>
+            <span class="meta-badge cpc" id="metaCpc">광고단가: —</span>
+          </div>
+        </div>
+
+        <div class="results-grid">
+          <!-- 관련 키워드 -->
+          <div class="result-card wide" id="relatedCard">
+            <div class="card-title">📋 관련 키워드 (수익성 높은 순)</div>
+            <div class="keyword-table-wrap">
+              <table class="keyword-table">
+                <thead>
+                  <tr>
+                    <th>키워드</th>
+                    <th>월 검색량</th>
+                    <th>경쟁도</th>
+                    <th>예상 CPC</th>
+                    <th>수익성</th>
+                    <th>글쓰기</th>
+                  </tr>
+                </thead>
+                <tbody id="keywordTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 블로그 지수 -->
+          <div class="result-card" id="blogIndexCard">
+            <div class="card-title">📊 블로그 지수</div>
+            <div class="blog-index-grid" id="blogIndexGrid"></div>
+          </div>
+
+          <!-- 콘텐츠 아이디어 -->
+          <div class="result-card" id="contentIdeaCard">
+            <div class="card-title">💡 콘텐츠 아이디어</div>
+            <div class="idea-list" id="ideaList"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 실시간 검색어 미니 -->
+      <div class="realtime-mini">
+        <div class="realtime-header">
+          <span>⚡ 실시간 검색어 순위</span>
+          <span class="realtime-time" id="realtimeTime"></span>
+        </div>
+        <div class="realtime-list" id="realtimeMiniList"></div>
+      </div>
+    </section>
+
+    <!-- ======================== TAB: AI 글쓰기 ======================== -->
+    <section class="tab-section" id="tabWrite">
+      <div class="write-layout">
+        <!-- 왼쪽: 설정 패널 -->
+        <div class="write-sidebar">
+          <div class="sidebar-header">
+            <span class="sidebar-icon">✍️</span>
+            <span>AI 프레스런 글쓰기</span>
+          </div>
+
+          <div class="write-tabs">
+            <button class="write-tab active" data-wtab="article" id="wtabArticle">AI 글쓰기</button>
+            <button class="write-tab" data-wtab="thumbnail" id="wtabThumbnail">AI 썸네일</button>
+          </div>
+
+          <div class="write-form" id="writeFormArticle">
+            <div class="form-group">
+              <label class="form-label">주제 키워드:</label>
+              <textarea class="form-textarea" id="writeKeyword" placeholder="키워드나 질문을 입력하세요&#10;예) 2026 실손보험 청구 방법&#10;예) 청년도약계좌 신청 자격 조건" rows="3"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">글 유형:</label>
+              <select class="form-select" id="writeType">
+                <option value="info">정보/안내</option>
+                <option value="review">리뷰/후기</option>
+                <option value="compare">비교/분석</option>
+                <option value="howto">방법/가이드</option>
+                <option value="news">뉴스/트렌드</option>
+                <option value="list">리스트/추천</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">언어 선택:</label>
+              <select class="form-select" id="writeLang">
+                <option value="ko">한국어</option>
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+                <option value="zh">中文</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">글 분량:</label>
+              <select class="form-select" id="writeLength">
+                <option value="short">짧게 (700~1,000자)</option>
+                <option value="medium" selected>보통 (1,500~2,000자)</option>
+                <option value="long">길게 (3,000자 이상)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">글쓰기 톤:</label>
+              <div class="tone-options">
+                <button class="tone-btn active" data-tone="friendly" id="toneFriendly">친근한</button>
+                <button class="tone-btn" data-tone="professional" id="tonePro">전문적</button>
+                <button class="tone-btn" data-tone="casual" id="toneCasual">가벼운</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">SEO 옵션:</label>
+              <div class="checkbox-group">
+                <label class="checkbox-label"><input type="checkbox" id="chkSeoTitle" checked /> SEO 제목 생성</label>
+                <label class="checkbox-label"><input type="checkbox" id="chkMetaDesc" checked /> 메타 설명 생성</label>
+                <label class="checkbox-label"><input type="checkbox" id="chkSchema" /> 스키마 마크업</label>
+                <label class="checkbox-label"><input type="checkbox" id="chkHashtag" checked /> 해시태그 생성</label>
+              </div>
+            </div>
+
+            <button class="btn-generate" id="btnGenerate">
+              <span class="btn-generate-icon">🚀</span>
+              AI 콘텐츠 생성
+            </button>
+          </div>
+
+          <!-- 썸네일 탭 -->
+          <div class="write-form hidden" id="writeFormThumbnail">
+            <div class="form-group">
+              <label class="form-label">글 제목:</label>
+              <input type="text" class="form-input" id="thumbTitle" placeholder="썸네일에 넣을 제목" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">썸네일 스타일:</label>
+              <select class="form-select" id="thumbStyle">
+                <option>블로그 (밝은 배경)</option>
+                <option>유튜브 (강한 임팩트)</option>
+                <option>카드뉴스 (인스타)</option>
+                <option>뉴스 스타일</option>
+              </select>
+            </div>
+            <button class="btn-generate" id="btnThumb">🎨 AI 썸네일 생성</button>
+          </div>
+        </div>
+
+        <!-- 오른쪽: 글 출력 영역 -->
+        <div class="write-output">
+          <div class="output-toolbar">
+            <div class="output-tabs">
+              <button class="output-tab active" id="otabPreview">미리보기</button>
+              <button class="output-tab" id="otabHtml">HTML</button>
+              <button class="output-tab" id="otabSeo">SEO 분석</button>
+            </div>
+            <div class="output-actions">
+              <button class="action-btn" id="btnCopy" title="복사">📋 복사</button>
+              <button class="action-btn" id="btnDownload" title="다운로드">⬇️ 저장</button>
+              <button class="action-btn" id="btnRegen" title="재생성">🔄 재생성</button>
+            </div>
+          </div>
+
+          <div class="output-area" id="outputArea">
+            <div class="output-placeholder" id="outputPlaceholder">
+              <div class="placeholder-icon">✍️</div>
+              <p>왼쪽에서 키워드를 입력하고<br/><strong>AI 콘텐츠 생성</strong> 버튼을 누르세요</p>
+              <div class="placeholder-tips">
+                <p>💡 <strong>팁:</strong> 구체적인 키워드일수록 좋은 글이 생성됩니다</p>
+                <p>💡 <strong>팁:</strong> "키워드 도구"에서 키워드를 선택하면 자동으로 입력됩니다</p>
+              </div>
+            </div>
+            <div class="output-content hidden" id="outputContent"></div>
+          </div>
+
+          <!-- 생성 중 로더 -->
+          <div class="generating-overlay hidden" id="generatingOverlay">
+            <div class="generating-box">
+              <div class="generating-spinner"></div>
+              <p class="generating-text" id="generatingText">AI가 글을 작성하는 중...</p>
+              <div class="generating-steps">
+                <div class="gen-step active" id="genStep1">📋 키워드 분석 중</div>
+                <div class="gen-step" id="genStep2">✍️ 글 초안 작성 중</div>
+                <div class="gen-step" id="genStep3">🔍 SEO 최적화 중</div>
+                <div class="gen-step" id="genStep4">✅ 완료!</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================== TAB: 실시간 검색어 ======================== -->
+    <section class="tab-section" id="tabTrend">
+      <div class="trend-page">
+        <h1 class="trend-title">⚡ 실시간 검색어 순위</h1>
+        <p class="trend-sub">지금 이 순간 사람들이 가장 많이 검색하는 키워드 — 글쓰기 소재로 바로 활용하세요!</p>
+
+        <div class="trend-controls">
+          <button class="trend-src-btn active" id="trendNaver">🟢 네이버</button>
+          <button class="trend-src-btn" id="trendGoogle">🔵 구글</button>
+          <button class="trend-src-btn" id="trendDaum">🟡 다음</button>
+          <span class="trend-updated" id="trendUpdated">업데이트: 방금 전</span>
+          <button class="btn-refresh" id="btnRefreshTrend">🔄 새로고침</button>
+        </div>
+
+        <div class="trend-grid" id="trendGrid"></div>
+      </div>
+    </section>
+
+    <!-- ======================== TAB: AI 썸네일 ======================== -->
+    <section class="tab-section" id="tabThumbnail">
+      <div class="thumb-page">
+        <h1>🖼️ AI 썸네일 생성기</h1>
+        <p>블로그 포스트를 위한 클릭율 높은 썸네일을 AI로 즉시 생성하세요</p>
+        <div class="thumb-coming-soon">
+          <div class="coming-icon">🚀</div>
+          <h2>준비 중입니다</h2>
+          <p>AI 썸네일 생성 기능이 곧 출시됩니다!</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- SEO 분석 결과 패널 -->
+  <div class="seo-panel hidden" id="seoPanel"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
