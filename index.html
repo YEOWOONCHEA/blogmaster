@@ -25,11 +25,12 @@
         <a href="#" class="nav-link" data-tab="thumbnail" id="navThumb">🖼️ AI 썸네일</a>
       </nav>
       <div class="header-right">
-        <div class="credit-badge">
-          <span class="credit-icon">⚡</span>
-          <span id="creditCount">850</span> 크레딧
+        <div class="gemini-status" id="geminiStatus" title="Gemini API 상태">
+          <span class="gemini-dot disconnected" id="geminiDot"></span>
+          <span id="geminiLabel">Gemini 미연결</span>
         </div>
-        <button class="btn-upgrade" id="btnUpgrade">PRO 업그레이드</button>
+        <button class="btn-api-key" id="btnApiKey">🔑 API 키 설정</button>
+        <button class="btn-upgrade" id="btnUpgrade">PRO</button>
       </div>
     </div>
   </header>
@@ -293,6 +294,39 @@
 
   <!-- SEO 분석 결과 패널 -->
   <div class="seo-panel hidden" id="seoPanel"></div>
+
+  <!-- Gemini API Key Modal -->
+  <div class="modal-overlay hidden" id="apiModalOverlay">
+    <div class="api-modal" id="apiModal">
+      <div class="api-modal-header">
+        <div class="gemini-logo">✨ Gemini AI 연결</div>
+        <button class="modal-close-btn" id="apiModalClose">✕</button>
+      </div>
+      <div class="api-modal-body">
+        <div class="gemini-info-box">
+          <p>🔑 Google AI Studio에서 무료 API 키를 발급받아 연결하세요.</p>
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" class="api-link">→ API 키 발급받기 (무료)</a>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Gemini API 키:</label>
+          <div class="api-input-wrap">
+            <input type="password" class="form-input" id="geminiApiKeyInput" placeholder="AIzaSy..." />
+            <button class="btn-eye" id="btnEyeToggle">👁️</button>
+          </div>
+        </div>
+        <div class="api-model-group">
+          <label class="form-label">모델 선택:</label>
+          <select class="form-select" id="geminiModel">
+            <option value="gemini-1.5-flash">gemini-1.5-flash (빠름, 무료)</option>
+            <option value="gemini-1.5-pro">gemini-1.5-pro (고품질)</option>
+            <option value="gemini-2.0-flash">gemini-2.0-flash (최신)</option>
+          </select>
+        </div>
+        <button class="btn-connect" id="btnConnectGemini">🚀 연결하기</button>
+        <div class="api-test-result hidden" id="apiTestResult"></div>
+      </div>
+    </div>
+  </div>
 
   <script src="script.js"></script>
 </body>
